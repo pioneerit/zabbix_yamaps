@@ -3,7 +3,7 @@
             position: absolute;
             background: #FFFFCC;
             border: 1px solid #006600;
-            border-radius: 12px;
+            border-radius: 1px;
             padding-bottom: 10px;
             z-index: 2
         }
@@ -34,6 +34,9 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 	tmp_placemarks: [],
 	LinksArray :  undefined,
 	LinksChange :	[],     // Contains the changed edges of links 
+	ImagesArray: [],        // Contains the  Zabbix icons id
+	TmpLabel:    [],        // Содержит две красные метки для обозначения точек - концов линка  		
+
 	/* Add new methods */
 	/**
 	 * Initialization of additional controls
@@ -44,6 +47,9 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		me.HostArray = new ymaps.Clusterer({ maxZoom : 9});
 		//san
 		me.LinksArray = new ymaps.GeoObjectArray({},{mylink:1});
+                me.TmpLabel [0]= new ymaps.Placemark([me.deflat,me.deflon],{},{'preset' : 'twirl#redIcon'});       
+		me.TmpLabel [1]= new ymaps.Placemark([me.deflat,me.deflon],{},{'preset' : 'twirl#redIcon'});
+
 		me.SetSelect(document.getElementById("selectgroup"), "<?php echo _('All'); ?>", "<?php echo _('All'); ?>");
 		
 		me.SaveButton = new ymaps.control.Button({
@@ -116,15 +122,43 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		jQuery('#selectgroup').change(function() {
 			me.ChangeGroup();
 		});
+	   	
+		me.FillImagesArray();
 	},
 
+	//<-- san
+	FillImagesArray: function (){
+		var me = this;
+                var query = {
+                       jsonrpc:"2.0",
+                       method:"image.getobjects",
+                       params: {
+	                          imagetype: '1',
+	                          output: 'imageid,name'
+                                },
+                       id: 1
+                      };
+                    me.apiQuery(query, true, function(imagedata){
+        			  for ( var i = 0; i < imagedata.result.length; i++) {
+					me.ImagesArray[i]=new Object ({
+					    imageid: imagedata.result[i].imageid,
+					    name: imagedata.result[i].name
+					    });
+				  }
+			//	console.log(me.ImagesArray);
+                        }, 'Cannot load images ids');
+
+
+	},    
+
+	//san-->
 	/**
 	 * Saves the changed hosts
 	 */
 	save_change: function() {
 		var me = this;
+
 		for (var i = 0; i < this.ChangeHost.length; i++) {
-			
 			var query = {
 					jsonrpc:"2.0",
 					method:"host.update",
@@ -146,15 +180,22 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 			    });
 			}, 'Cannot save the objects');
 	     	} //for
-         //<--san 
+		//san
+		me.save_change_another();
+        
+	},
+
+	 //<--san 
+        // Дополнительная запись в базу
+	save_change_another: function() {
+		var me = this;
 	// Запишем измененные линки (точнее вершины)
 	for (var i = 0; i < me.LinksChange.length; i++) {
-	// for (var i = 0; i < me.Hosts.length; i++) {	
 		var my_hostid=me.LinksChange[i];
-		//var my_hostid=me.Hosts[i].properties.get('hostid');
 		var neighbour_peaks=[];
 		var neighbour_peaks_strokeColor=[];
 		var neighbour_peaks_strokeWidth=[];
+		var neighbour_peaks_strokeStyle=[];
 		var neighbour_peaks_hint=[];
 
 			neighbour_peaks.length=0;	
@@ -164,32 +205,59 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 				var  tmp_edge0= Link.properties.get('edge0');
 				var  tmp_edge1= Link.properties.get('edge1');
 				var  tmp_strokeColor=Link.options.get('strokeColor');
+				var  tmp_strokeStyle=Link.options.get('strokeStyle');
 				var  tmp_strokeWidth=Link.options.get('strokeWidth');
 				var  tmp_hintContent=Link.properties.get('my_hintContent');
 
 				if (my_hostid ==tmp_edge0) {
 					neighbour_peaks.push(tmp_edge1);
 					neighbour_peaks_strokeColor.push(tmp_strokeColor);
+					neighbour_peaks_strokeStyle.push(tmp_strokeStyle);
 					neighbour_peaks_strokeWidth.push(tmp_strokeWidth); 
 					neighbour_peaks_hint.push(tmp_hintContent);
 					}
 				if (my_hostid ==tmp_edge1) {
 					neighbour_peaks.push(tmp_edge0);
 					neighbour_peaks_strokeColor.push(tmp_strokeColor);
+					 neighbour_peaks_strokeStyle.push(tmp_strokeStyle);
 					neighbour_peaks_strokeWidth.push(tmp_strokeWidth);
  				        neighbour_peaks_hint.push(tmp_hintContent);
 					}
 			}
+			
 			// Будем записывать через объект. Возможно придется раширять некоторые параметры записей
 			var MyObject= new Object ({
 					neighbour_peaks: neighbour_peaks,
 					neighbour_peaks_strokeColor: neighbour_peaks_strokeColor,
 					neighbour_peaks_strokeWidth: neighbour_peaks_strokeWidth,
+					neighbour_peaks_strokeStyle: neighbour_peaks_strokeStyle,
 					neighbour_peaks_hintContent: neighbour_peaks_hint 
 				}); 
-			//console.log('id='+my_hostid+'  array='+neighbour_peaks);
+			// Дополним запись сведениями о картинке Хоста
+                        for (var k=0 ; k<me.Hosts.length;k++){
+			     var myHost = me.Hosts[k];
+			     //console.log('id='+ my_hostid +' hostid='+myHost.properties.get("hostid")+'  k='+k);
+			     if (my_hostid==myHost.properties.get('hostid')){
+				if (myHost.properties.get('imageid')==undefined){
+					// Свойство не установлено -> нет картинки
+					break;
+				}
+				//Есть картинка 
+
+				var MyImage = new Object ({
+					imageid: myHost.properties.get('imageid'),
+					iconImageSize: myHost.options.get('iconImageSize'),
+					iconImageOffset: myHost.options.get('iconImageOffset')
+
+				    });
+			// Будем записывать массив картинок (закладка на будущее развитие. Например картиник по типам проблем)	
+				MyObject.ImagesArray = [MyImage];
+
+				break;
+				}
+                        }
                         var json_object=JSON.stringify(MyObject);
-			//console.log(json_object);
+			console.log(json_object);
                         var query1 = {
                                         jsonrpc:"2.0",
                                         method:"host.update",
@@ -202,15 +270,8 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
                                         id: i
                                      };
 
-                            
-                        me.apiQuery(query1, true, function(){
-                                me.SaveButton.disable();
-                                me.saved = false;
-                                me.SaveButton.events.remove('click', function() {
-                                me.save_change();
-                            });
-                        }, 'Cannot save the objects');
-			
+                         
+                        me.apiQuery(query1, true, function(){ }, 'Cannot save the objects');
 		}	
 		me.LinksChange.length=0;
  	//san -->
@@ -253,7 +314,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
                  if (me.LinksChange[i]== id0) {flag_id0=true;}
 		 if (me.LinksChange[i]== id1) {flag_id1=true;}
 
- 	     }	
+	     }	
 	     if (flag_id0==false){me.LinksChange.push(id0);}
 	     if (flag_id1==false){me.LinksChange.push(id1);}	
 	},	
@@ -281,7 +342,6 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
             	var coords = Link.geometry.getCoordinates();
 	        var id0=Link.properties.get('edge0');
         	var id1=Link.properties.get('edge1');
-
 		//console.log(event.get('position'));
 		//console.log('Link dblclik '+ Link.properties.get('edge0')+' --- '+Link.properties.get('edge1'));	
                 // смотри http://api.yandex.ru/maps/jsbox/geoobject_contextmenu
@@ -289,12 +349,24 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		    // Если меню метки уже отображено, то убираем его.
 	        if (jQuery('#menu').css('display') == 'block') { jQuery('#menu').remove();}
 		else{
+			/*
+			var OldCoordinates=Link.geometry.getCoordinates();
+			 Link.editor.startEditing();
+			*/
             	var menuContent =
                 	'<div id="menu">\
+			<div style="float:right"><img id="closebutton" src="images/general/error2.png" /> </div>\
 			<div align="center"> Ввод параметров ломаной</div>\
 	                    <ul id="menu_list">\
         	                <li>Толщина линии: <br /> <input type="text" name="hline" /></li>\
                 	        <li>Цвет линии: <br /> <input class="color" name="colorpline" /></li>\
+				<li>Стиль линии: <br /> <input type="text" name="strokestyle" \>\
+				   <br>Если стиль имеет значение 1 5, это означает,\
+				   <br>что надо нарисовать штрих\
+				   <br> длиной одну ширину линии,\
+				   <br>и потом 5 ширин пропустить\
+				</li>\
+				<br>\
 				<li>Подсказка (hint): <br /> <textarea rows="5" cols="20" name="hint" wrap="soft"></textarea>\
         	            </ul>\
                 	<div align="center"><input type="submit" value="Сохранить" /></div>\
@@ -309,15 +381,20 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		// Заполняем значения формы текущими значениями Link
 		jQuery('input[name="hline"]').val(Link.options.get('strokeWidth'));
 		jQuery('input[name="colorpline"]').val(Link.options.get('strokeColor'));
+		jQuery('input[name="strokestyle"]').val(Link.options.get('strokeStyle'));
 		if (Link.properties.get('my_hintContent')!=''){jQuery('textarea[name="hint"]').val(Link.properties.get('my_hintContent'));}	
 
 		//как хорошо, что есть www.jscolor.com
 		jscolor.bind();
 
+               // кнопка закрытия формы        
+                jQuery('#closebutton').click(function() {/*Link.geometry.setCoordinates( OldCoordinates)*/;jQuery('#menu').remove();});
+
 	       jQuery('#menu input[type="submit"]').click(function () {
 			Link.options.set({
 			strokeWidth:jQuery('input[name="hline"]').val(), 
-			strokeColor:jQuery('input[name="colorpline"]').val()
+			strokeColor:jQuery('input[name="colorpline"]').val(),
+			strokeStyle:jQuery('input[name="strokestyle"]').val()	
 			});
 
 			Link.properties.set('my_hintContent',jQuery.trim( jQuery('textarea[name="hint"]').val() ) );
@@ -334,14 +411,21 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 	               }  
           	       if (flag_id0==false){me.LinksChange.push(id0);}
 	               if (flag_id1==false){me.LinksChange.push(id1);}   
+			
+			// Link.editor.stopEditing();
 
+			// Изменим логику записи в базу
+			/*	
 		       if (me.saved == false) {
                         me.saved = true;
                         me.SaveButton.enable();
                         me.SaveButton.events.add('click', function() {
                                 me.save_change();
                         });
-                       }
+                        }
+			*/
+			 me.save_change_another();
+                       
 
 		      // Удаляем контекстное меню.
         	        jQuery('#menu').remove();
@@ -402,6 +486,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
  	     me.Map.geoObjects.add(me.LinksArray);
 	  // запоминаем эти изменения для последующей записи в базу через JSON
 	      me.MakeLinksChange();
+		/*
                if (me.saved == false) {
                         me.saved = true;
                         me.SaveButton.enable();
@@ -409,6 +494,8 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
                                 me.save_change();
                 	});
 		}
+		*/
+		me.save_change_another();	
 
 	},
 
@@ -432,6 +519,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		 me.Map.geoObjects.add(me.LinksArray);
 		// запоминаем эти изменения для последующей записи в базу через JSON
               	me.MakeLinksChange();
+		/*
                if (me.saved == false) {
                         me.saved = true;
                         me.SaveButton.enable();
@@ -439,9 +527,12 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
                                 me.save_change();
                 	});
 		}
+		*/
+		me.save_change_another();	
 
 	},
         //  FillLinks Вызывается из ChangeGroup
+	//   	
 	FillLinks: function(MyHost){
 	     var me=this; 	
 	     var myout=''+MyHost.inventory.notes;
@@ -452,20 +543,14 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		   var arr1=jQuery.parseJSON(myObject.neighbour_peaks);  
 		   var arr_strokeColor=jQuery.parseJSON(myObject.neighbour_peaks_strokeColor);
 		   var arr_strokeWidth=jQuery.parseJSON(myObject.neighbour_peaks_strokeWidth);					
+		   var arr_strokeStyle=jQuery.parseJSON(myObject.neighbour_peaks_strokeStyle);
 		   var arr_hintContent=jQuery.parseJSON(myObject.neighbour_peaks_hintContent);
 		     // ну это просто изврат	
 		    if (jQuery.isArray(arr_strokeColor)==false){arr_strokeColor=[];  for (var i=0; i<arr1.length;i++){ arr_strokeColor[i]='#0000FF';} }
-		    if (jQuery.isArray(arr_strokeWidth)== false){arr_strokeWidth=[]; for (var i=0; i<arr1.length;i++){arr_strokeWidth[i]=2;} }		
+  		    if (jQuery.isArray(arr_strokeWidth)== false){arr_strokeWidth=[]; for (var i=0; i<arr1.length;i++){arr_strokeWidth[i]=2;} }		
+		    if (jQuery.isArray(arr_strokeStyle)== false){arr_strokeStyle=[]; for (var i=0; i<arr1.length;i++){arr_strokeStyle[i]='';} }
 		    if (jQuery.isArray(arr_hintContent)== false){arr_hintContent=[]; for (var i=0; i<arr1.length;i++){arr_hintContent[i]='';} }	
-/*
-			console.log('-----------------------------------');
-			console.log('id='+MyHost.hostid);
-			console.log(myObject);	
-			console.log(arr_strokeColor);
-			console.log(arr_strokeWidth);
-			console.log(arr_hintContent);
-			console.log(arr1);
-*/
+
 	       	   var add_toLinks=false;      
 	          for (var k=0 ;k<arr1.length;k++){
 	            // arr2 сортированный двухэлементный массив  
@@ -520,7 +605,8 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
                 	              }, {
 	                                    draggable: false,
 	                                    strokeColor: arr_strokeColor[k],
-	                                    strokeWidth: arr_strokeWidth[k]
+	                                    strokeWidth: arr_strokeWidth[k],
+					    strokeStyle: arr_strokeStyle[k]
 	                     });
 
                    myLink.events.add('dblclick',function(event){ me.SetOptionsLink(myLink,event);});
@@ -530,6 +616,153 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 	     }//for
            }//if	
     },	
+    
+    // Редактирование свойств метки		
+    SetOptionsHost: function(Host,event){
+	var me=this;	
+	//console.log('dblcklick host==>'+Host.properties.get('hostid'));
+	//console.log('dblcklick host==>'+Host.properties.get('imageid'));
+	  // HTML-содержимое контекстного меню.
+         // Если меню метки уже отображено, то убираем его.
+      if (jQuery('#menu').css('display') == 'block') { jQuery('#menu').remove();}
+      else{
+	 var TmpHost=new Object({
+		preset	:	Host.options.get('preset'),		
+		iconImageHref: Host.options.get('iconImageHref'),
+		iconImageSize: Host.options.get('iconImageSize'),
+		iconImageOffset: Host.options.get('iconImageOffset')
+		});
+     	 var menuContent =
+                        '<div id="menu">\
+			<div style="float:right"><img id="closebutton" src="images/general/error2.png" /> </div>\
+                        <div align="center"> Ввод параметров Хоста</div>\
+			<div id="imagePreview" style="float:left; width:30px;"></div>\
+			<div style="margin-left: 40px; width:210px;">\
+				<select name="icon_image" id="icon_image" class="inputbox" size="1">\
+				</select>\
+			</div>\
+			<div align="center"><table align="center" border="0">\
+				<tr><td colspan="2"><bold>Размер иконки</bold></td><tr>\
+				<tr>\
+				<td>Ширина</td><td>Высота</td>\
+				</tr><tr>\
+				<td><input type="text" name="w_image" /></td><td><input type="text" name="h_image" /></td>\
+				</tr>\
+                                <tr><td colspan="2"><bold>Смещение иконки</bold></td><tr>\
+                                <tr>\
+                                <td>Смещение X</td><td>Смещение Y</td>\
+                                </tr><tr>\
+                                <td><input type="text" name="x_offset" /></td><td><input type="text" name="y_offset" /></td>\
+                                </tr>\
+			     </table>\
+			</div>\
+                        <div align="center"><input type="submit" value="Сохранить" /></div>\
+                        </div>'; 
+               // Размещаем контекстное меню на странице
+                  jQuery('body').append(menuContent);
+		// Заполняем image
+		var htmlSelect=document.getElementById("icon_image");
+		opt = new Option("- Иконка по умолчанию - ", 0);
+                opt.selected = "selected";
+                htmlSelect.options.add(opt, 0);
+		var maxlen=0;
+		var imageid=Host.properties.get('imageid');
+                for (var i = 0; i < me.ImagesArray.length; i++) {
+                	opt = new Option(me.ImagesArray[i].name, me.ImagesArray[i].imageid);
+			var len = me.ImagesArray[i].name.length
+			if (len> maxlen){maxlen=len;}
+                    if ( imageid == me.ImagesArray[i].imageid) {
+                    	opt.selected = "selected";
+                        jQuery('input[name="w_image"]').val(Host.options.get('iconImageSize')[0]);
+                        jQuery('input[name="h_image"]').val(Host.options.get('iconImageSize')[1]);
+                        jQuery('input[name="x_offset"]').val(Host.options.get('iconImageOffset')[0]);
+                        jQuery('input[name="y_offset"]').val(Host.options.get('iconImageOffset')[1]);
+
+                    }
+		 htmlSelect.options.add(opt, i + 1);
+
+                }
+ 	      // Задаем позицию меню.
+	      jQuery('#menu').css({
+                   left: event.get('position')[0]+10,
+                   top: event.get('position')[1]+10,
+		   width: maxlen+'em'
+               });
+		// кнопка закрытия формы	
+		jQuery('#closebutton').click(function() {
+			jQuery('#menu').remove();
+		});
+	
+		jQuery('#icon_image').change(function() {
+			jQuery("#imagePreview").empty();
+			if (jQuery("#icon_image").val()!="0" ){
+				jQuery("#imagePreview").append("<img id=\"MyImg\" src=\"imgstore.php?iconid=" + jQuery("#icon_image").val() + "\" />");
+				jQuery("#MyImg").load(function() {
+					//console.log('Size: width:'+jQuery("#MyImg").width()+"  height: "+jQuery("#MyImg").height());	
+					//Подгоняем размер картинки (для красоты)
+
+					// Расчитываем коээфициент масштабирования иконки
+					var k_width=jQuery("#MyImg").width()/40;
+ 					var k_height=jQuery("#MyImg").height()/40;
+					var koef=Math.max(k_width,k_height);
+
+					jQuery('#MyImg').css({
+						width:  jQuery("#MyImg").width()/koef,
+						height: jQuery("#MyImg").height()/koef
+					});
+					 jQuery('input[name="w_image"]').val(jQuery("#MyImg").width());
+					 jQuery('input[name="h_image"]').val(jQuery("#MyImg").height());
+					 jQuery('input[name="x_offset"]').val(0);
+					 jQuery('input[name="y_offset"]').val(-jQuery("#MyImg").height());
+				});
+			}
+			else{
+				jQuery("#imagePreview").append("displays image here");
+				Host.options.set('preset', "twirl#blueIcon");
+			}
+                });
+
+		jQuery('#menu input[type="submit"]').click(function () {
+			if (jQuery("#icon_image").val()!="0" ){
+				Host.properties.set('imageid',jQuery("#icon_image").val());
+				Host.options.set({
+					iconImageHref:  'imgstore.php?iconid=' + Host.properties.get('imageid'),
+					iconImageSize: [jQuery('input[name="w_image"]').val(),jQuery('input[name="h_image"]').val()],
+					iconImageOffset:[jQuery('input[name="x_offset"]').val(),jQuery('input[name="y_offset"]').val()]
+				});
+			}
+			else{  // ставим назад стандартную метку
+				Host.options.unset(['iconImageHref','iconImageSize','iconImageOffset']);
+				Host.properties.unset('imageid');
+				Host.options.set('preset' , 'twirl#blueIcon');
+			}
+
+			//console.log(Host);
+			//console.log('id='+Host.properties.get('hostid')+'   Coords:'+Host.geometry.getCoordinates());
+			// Заносим данные  в LinksChange (так проще)для записи изменений в базу Zabbix
+			 var id0=Host.properties.get('hostid');
+			 var flag_ins = true;	
+			 for (var j=0;j<me.LinksChange.length;j++){
+	    		         if (me.LinksChange[j]==id0) {flag_ins=false;}
+		         }  
+			if (flag_ins==true){me.LinksChange.push(id0);}
+		
+			console.log(me.LinksChange);
+			/*
+	                if (me.saved == false) {
+                   	    	me.saved = true;
+	      	                me.SaveButton.enable();
+                       		me.SaveButton.events.add('click', function() { 
+					me.save_change(); 
+				});
+		        }
+			*/
+			me.save_change_another();
+		        jQuery('#menu').remove();
+
+		});
+      } //else
+    },
 	//san ->	
 
 	/**
@@ -601,7 +834,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 				me.Hosts[i] = new ymaps.Placemark(
 						[ x, y ], 
 						{
-							hintContent : ''+ out.result[i].name+' <br> '+out.result[i].hostid,
+							hintContent : ''+ out.result[i].name+' <br> '+out.result[i].hostid+ ' <br > <font color="red">Сделайте dblclick на хосте для редактирования его свойств</font>',
 							hostid : out.result[i].hostid
 						},
 						{
@@ -609,6 +842,24 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 							preset : iconPreset
 						}
 				);
+				//<--  san
+				
+				// var myout=out.result[i].inventory.notes
+				var myObject=jQuery.parseJSON(out.result[i].inventory.notes);	
+				//console.log(myObject);
+				if (myObject!=null){
+				  var ImagesArray=jQuery.parseJSON(myObject.ImagesArray);		
+				  if (jQuery.isArray(ImagesArray)==true){
+					 //console.log(ImagesArray[0]);
+					 me.Hosts[i].properties.set('imageid',ImagesArray[0].imageid);
+                                         me.Hosts[i].options.set({
+                                                        iconImageHref:  'imgstore.php?iconid=' +ImagesArray[0].imageid,
+                                                        iconImageSize:  ImagesArray[0].iconImageSize,
+                                                        iconImageOffset:ImagesArray[0].iconImageOffset
+                                         });
+				  }//if
+				}
+				// san ->
 				//console.log(me.Hosts[i]);
 				(function(i) {
 					me.Hosts[i].events.add('dragend', function() {
@@ -617,50 +868,65 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 								me.Hosts[i].geometry.getCoordinates()
 							);
 						});
-					me.Hosts[i].events.add('dblclick', function() {
-						//window.alert('dblclick '+ me.Hosts[i].properties.get('hostid')+ ' Coord:'+ me.Hosts[i].geometry.getCoordinates()+ "    "+me.AddLinkButton.isSelected());
+					me.Hosts[i].events.add('dblclick', function(event) {
 						if (me.AddLinkButton.isSelected()==true){
-							//console.log(""+ me.my_count+"   "+ me.Hosts[i].options.get('preset'));
 							if (me.my_count<=1){
-								//me.tmp_link_coord[me.my_count]= me.Hosts[i].geometry.getCoordinates();
 								me.tmp_placemarks[me.my_count]= me.Hosts[i];
-								me.Hosts[i].options.set('preset' , 'twirl#redIcon');
+								
+								//me.Hosts[i].options.set('preset' , 'twirl#redIcon');
+								me.Hosts[i].options.set('visible',false);
+								me.TmpLabel[me.my_count].geometry.setCoordinates(me.Hosts[i].geometry.getCoordinates());
+								me.TmpLabel[me.my_count].options.set('visible',true);
+							        me.Map.geoObjects.add(me.TmpLabel[me.my_count]);
 
+	
 								if (me.my_count==1){
+								    me.TmpLabel[0].options.set('visible',false);	
+								    me.TmpLabel[1].options.set('visible',false);
+								    me.Map.geoObjects.remove(me.TmpLabel);
+	
 								   if ( me.tmp_placemarks[0].properties.get('hostid')!=me.tmp_placemarks[1].properties.get('hostid')){	
 									 me.AddNewLink();
-								   }	
-									// перекрашиваем  наши метки в обычный цвет
-									 me.tmp_placemarks[0].options.set('preset' , 'twirl#blueIcon');
-									 me.tmp_placemarks[1].options.set('preset' , 'twirl#blueIcon');
+								   }
+	                                                                 me.tmp_placemarks[0].options.set('visible' , true);
+                                                                         me.tmp_placemarks[1].options.set('visible' , true);
+
 									// изврат
 									 me.my_count=-1;
 								}
 								me.my_count=me.my_count+1;
 							}
-
+						    return;
 						}
 						if (me.DelLinkButton.isSelected()==true){
-                                                        //console.log(""+ me.my_count+"   "+ me.Hosts[i].options.get('preset'));
                                                         if (me.my_count<=1){
                                                                 me.tmp_placemarks[me.my_count]= me.Hosts[i];
-                                                                me.Hosts[i].options.set('preset' , 'twirl#redIcon');
+                                                                //me.Hosts[i].options.set('preset' , 'twirl#redIcon');
+								me.Hosts[i].options.set('visible',false);
+								me.TmpLabel[me.my_count].geometry.setCoordinates(me.Hosts[i].geometry.getCoordinates());
+								 me.TmpLabel[me.my_count].options.set('visible',true);
+                                                                me.Map.geoObjects.add(me.TmpLabel[me.my_count]);
+
 
                                                                 if (me.my_count==1){
+                                                                   me.TmpLabel[0].options.set('visible',false);        
+                                                                   me.TmpLabel[1].options.set('visible',false);
+								    me.Map.geoObjects.remove(me.TmpLabel);
 								   if ( me.tmp_placemarks[0].properties.get('hostid')!=me.tmp_placemarks[1].properties.get('hostid')){	
                                                                          me.DelLink();
 								   }
-                                                                        // перекрашиваем  наши метки в обычный цвет
-                                                                         me.tmp_placemarks[0].options.set('preset' , 'twirl#blueIcon');
-                                                                         me.tmp_placemarks[1].options.set('preset' , 'twirl#blueIcon');
+                                                                         me.tmp_placemarks[0].options.set('visible' , true);
+                                                                         me.tmp_placemarks[1].options.set('visible' , true);
+
                                                                         // изврат
                                                                          me.my_count=-1;
                                                                 }
                                                                 me.my_count=me.my_count+1;
                                                         }
-							
+						    return;
 						}
-
+						    // просто двойной клик на хосте 
+						    me.SetOptionsHost(me.Hosts[i],event);
 						});
 				})(i);
 				me.HostArray.add(me.Hosts[i]);

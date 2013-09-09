@@ -420,11 +420,13 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
                    var arr1=jQuery.parseJSON(myObject.neighbour_peaks);  
                    var arr_strokeColor=jQuery.parseJSON(myObject.neighbour_peaks_strokeColor);
                    var arr_strokeWidth=jQuery.parseJSON(myObject.neighbour_peaks_strokeWidth);
+		   var arr_strokeStyle=jQuery.parseJSON(myObject.neighbour_peaks_strokeStyle);
 		   var arr_hintContent=jQuery.parseJSON(myObject.neighbour_peaks_hintContent);
 
                      // ну это просто изврат    
                     if (jQuery.isArray(arr_strokeColor)==false){arr_strokeColor=[];  for (var i=0; i<arr1.length;i++){ arr_strokeColor[i]='#0000FF';} }
                     if (jQuery.isArray(arr_strokeWidth)== false){arr_strokeWidth=[]; for (var i=0; i<arr1.length;i++){arr_strokeWidth[i]=2;} }          
+		    if (jQuery.isArray(arr_strokeStyle)== false){arr_strokeStyle=[]; for (var i=0; i<arr1.length;i++){arr_strokeStyle[i]='';} }
 		    if (jQuery.isArray(arr_hintContent)== false){arr_hintContent=[]; for (var i=0; i<arr1.length;i++){arr_hintContent[i]='';} } 
 
                    var add_toLinks=false;      
@@ -479,7 +481,8 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
                                       }, {
                                             draggable: false,
                                             strokeColor: arr_strokeColor[k],
-                                            strokeWidth: arr_strokeWidth[k]
+                                            strokeWidth: arr_strokeWidth[k],
+					    strokeStyle: arr_strokeStyle[k]
                              });
 
                   // myLink.events.add('dblclick',function(event){ me.SetOptionsLink(myLink,event);});
@@ -626,6 +629,25 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
                                                 }
 
                                            );
+               			                 //<--  san
+                                
+                                		// var myout=out.result[i].inventory.notes
+		                                var myObject=jQuery.parseJSON(out.result[i].inventory.notes);   
+		                                //console.log(myObject);
+		         		        if (myObject!=null){
+				                      	var ImagesArray=jQuery.parseJSON(myObject.ImagesArray);
+                                			if (jQuery.isArray(ImagesArray)==true){
+		                                         //console.log(ImagesArray[0]);
+                		                          aaaa.properties.set('imageid',ImagesArray[0].imageid);
+                                		          aaaa.options.set({
+                                                	        iconImageHref:  'imgstore.php?iconid=' +ImagesArray[0].imageid,
+		                                                iconImageSize:  ImagesArray[0].iconImageSize,
+                		                                iconImageOffset:ImagesArray[0].iconImageOffset
+                                		         });
+		                                 	}//if
+                		                }
+                                		// san ->
+
 /*
 					 (function(aaaa){
 						 aaaa.events.add('balloonopen', function () { me.FillBallon(aaaa);});		
