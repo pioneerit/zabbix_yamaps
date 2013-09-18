@@ -197,31 +197,36 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		var neighbour_peaks_strokeWidth=[];
 		var neighbour_peaks_strokeStyle=[];
 		var neighbour_peaks_hint=[];
+		var neighbour_peaks_linkCoordinates=[];
 
 			neighbour_peaks.length=0;	
                         // в цикле формируем массив связянных с данной вершин
 			for (var j=0 ; j < me.LinksArray.getLength();j++){
-				var Link=me.LinksArray.get(j);
+				var  Link=me.LinksArray.get(j);
 				var  tmp_edge0= Link.properties.get('edge0');
 				var  tmp_edge1= Link.properties.get('edge1');
 				var  tmp_strokeColor=Link.options.get('strokeColor');
 				var  tmp_strokeStyle=Link.options.get('strokeStyle');
 				var  tmp_strokeWidth=Link.options.get('strokeWidth');
 				var  tmp_hintContent=Link.properties.get('my_hintContent');
+				//  ДЕЛАЕМ КОПИЮ массива координат , т к  его возможно надо будет переворачивать 
+				var  tmp_linkCoordinates=Link.geometry.getCoordinates().slice(0);
 
-				if (my_hostid ==tmp_edge0) {
+				if (my_hostid ==tmp_edge0) { // начальная точка
 					neighbour_peaks.push(tmp_edge1);
 					neighbour_peaks_strokeColor.push(tmp_strokeColor);
 					neighbour_peaks_strokeStyle.push(tmp_strokeStyle);
 					neighbour_peaks_strokeWidth.push(tmp_strokeWidth); 
 					neighbour_peaks_hint.push(tmp_hintContent);
+					neighbour_peaks_linkCoordinates.push(tmp_linkCoordinates);
 					}
-				if (my_hostid ==tmp_edge1) {
+				if (my_hostid ==tmp_edge1) { // конечная точка
 					neighbour_peaks.push(tmp_edge0);
 					neighbour_peaks_strokeColor.push(tmp_strokeColor);
-					 neighbour_peaks_strokeStyle.push(tmp_strokeStyle);
+					neighbour_peaks_strokeStyle.push(tmp_strokeStyle);
 					neighbour_peaks_strokeWidth.push(tmp_strokeWidth);
  				        neighbour_peaks_hint.push(tmp_hintContent);
+					neighbour_peaks_linkCoordinates.push(tmp_linkCoordinates.reverse());
 					}
 			}
 			
@@ -231,8 +236,10 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 					neighbour_peaks_strokeColor: neighbour_peaks_strokeColor,
 					neighbour_peaks_strokeWidth: neighbour_peaks_strokeWidth,
 					neighbour_peaks_strokeStyle: neighbour_peaks_strokeStyle,
-					neighbour_peaks_hintContent: neighbour_peaks_hint 
+					neighbour_peaks_hintContent: neighbour_peaks_hint,
+					neighbour_peaks_linkCoordinates: neighbour_peaks_linkCoordinates 
 				}); 
+
 			// Дополним запись сведениями о картинке Хоста
                         for (var k=0 ; k<me.Hosts.length;k++){
 			     var myHost = me.Hosts[k];
@@ -331,7 +338,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 				Link.geometry.setCoordinates(tmp_coords);
 			}	 
                         if  (tmp_edge1==id){
-                                tmp_coords[1]=newpoint_coords;
+                                tmp_coords[tmp_coords.length-1]=newpoint_coords;
 				Link.geometry.setCoordinates(tmp_coords);
                         }
 		}
@@ -349,10 +356,23 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		    // Если меню метки уже отображено, то убираем его.
 	        if (jQuery('#menu').css('display') == 'block') { jQuery('#menu').remove();}
 		else{
-			/*
+			
 			var OldCoordinates=Link.geometry.getCoordinates();
+
+			// Запрещаем удаление вешины по двойному клику	
+			Link.editor.options.set('dblClickHandler', function () {});
+			// Удаляем контекстное меню для 'крайних ' вершин
+			// А вообще почему-то нельзя использовать Link.editor.options.set для MenuManager	
+			Link.options.set({
+				editorMenuManager: function (menuItems, vertex) {
+					var myIndex=vertex.getIndex();
+					if ((myIndex==0) || (myIndex==Link.geometry.getLength()-1) ){return [];}
+				 	return menuItems;
+				     }
+			  		
+			});
 			 Link.editor.startEditing();
-			*/
+
             	var menuContent =
                 	'<div id="menu">\
 			<div style="float:right"><img id="closebutton" src="images/general/error2.png" /> </div>\
@@ -388,7 +408,11 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		jscolor.bind();
 
                // кнопка закрытия формы        
-                jQuery('#closebutton').click(function() {/*Link.geometry.setCoordinates( OldCoordinates)*/;jQuery('#menu').remove();});
+                jQuery('#closebutton').click(function() {
+			Link.geometry.setCoordinates( OldCoordinates);
+			Link.editor.stopEditing();
+			jQuery('#menu').remove();
+		});
 
 	       jQuery('#menu input[type="submit"]').click(function () {
 			Link.options.set({
@@ -412,7 +436,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
           	       if (flag_id0==false){me.LinksChange.push(id0);}
 	               if (flag_id1==false){me.LinksChange.push(id1);}   
 			
-			// Link.editor.stopEditing();
+			 Link.editor.stopEditing();
 
 			// Изменим логику записи в базу
 			/*	
@@ -478,6 +502,9 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
                     // Ширина линии.
                        strokeWidth: 2
                    });
+		//Будем считаль edge0   хост с наименьшим id. edge1 -  хост с наибольшим id 	
+		myLink.properties.set ('edge0',''+Math.min(0+me.tmp_placemarks[0].properties.get('hostid'),0+me.tmp_placemarks[1].properties.get('hostid') ) );
+		myLink.properties.set ('edge1',''+Math.max(0+me.tmp_placemarks[0].properties.get('hostid'),0+me.tmp_placemarks[1].properties.get('hostid') ) );
 
                myLink.events.add('dblclick',function(event){ me.SetOptionsLink(myLink,event);});
 	   //  console.log(myLink.properties.get('edge0')+' Length= '+ me.LinksArray.getLength());	
@@ -542,28 +569,37 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		   var myObject=jQuery.parseJSON(myout);
 		   var arr1=jQuery.parseJSON(myObject.neighbour_peaks);  
 		   var arr_strokeColor=jQuery.parseJSON(myObject.neighbour_peaks_strokeColor);
-		   var arr_strokeWidth=jQuery.parseJSON(myObject.neighbour_peaks_strokeWidth);					
+		   var arr_strokeWidth=jQuery.parseJSON(myObject.neighbour_peaks_strokeWidth);
 		   var arr_strokeStyle=jQuery.parseJSON(myObject.neighbour_peaks_strokeStyle);
 		   var arr_hintContent=jQuery.parseJSON(myObject.neighbour_peaks_hintContent);
+		   var arr_linkCoordinates=jQuery.parseJSON(myObject.neighbour_peaks_linkCoordinates);	
 		     // ну это просто изврат	
 		    if (jQuery.isArray(arr_strokeColor)==false){arr_strokeColor=[];  for (var i=0; i<arr1.length;i++){ arr_strokeColor[i]='#0000FF';} }
   		    if (jQuery.isArray(arr_strokeWidth)== false){arr_strokeWidth=[]; for (var i=0; i<arr1.length;i++){arr_strokeWidth[i]=2;} }		
 		    if (jQuery.isArray(arr_strokeStyle)== false){arr_strokeStyle=[]; for (var i=0; i<arr1.length;i++){arr_strokeStyle[i]='';} }
 		    if (jQuery.isArray(arr_hintContent)== false){arr_hintContent=[]; for (var i=0; i<arr1.length;i++){arr_hintContent[i]='';} }	
-
-	       	   var add_toLinks=false;      
+		    if (jQuery.isArray(arr_linkCoordinates)== false){arr_linkCoordinates=[]; for (var i=0; i<arr1.length;i++){arr_linkCoordinates[i]=[[x,y],[x,y]]; } }	
+/*
+		console.log(MyHost);
+		console.log(arr1 +' length'+arr1.length);	
+		console.log(jQuery.parseJSON(myObject.neighbour_peaks_linkCoordinates));	
+		console.log(jQuery.isArray(jQuery.parseJSON(myObject.neighbour_peaks_linkCoordinates)));
+                console.log(arr_linkCoordinates);
+*/
+	       	   var add_toLinks=false;
 	          for (var k=0 ;k<arr1.length;k++){
 	            // arr2 сортированный двухэлементный массив  
+		    // Link'и будут начинаться с наименьше вершины (hostid) и заканчиваться наибольшей	
 	            var arr2=[arr1[k],arr1[k]];
 	            var  tmp_coord=[];   
-	            if (MyHost.hostid<arr1[k])
-	            /*
-	             координаты сначала для линка будут точка
-	             лучше так, чем потерять связь между точками
-	             при записи     
-	            */
-        	        {arr2[0]=MyHost.hostid;tmp_coord=[[x,y],[x,y]];}
-	                else{arr2[1]=MyHost.hostid;tmp_coord=[[x,y],[x,y]];}
+                    /*
+                     координаты сначала для линка будут точка
+                     лучше так, чем потерять связь между точками
+                     при записи     
+                    */
+
+	            if (0+MyHost.hostid<0+arr1[k]){arr2[0]=MyHost.hostid;tmp_coord=[[x,y],[x,y]];}
+	            else{arr2[1]=MyHost.hostid;tmp_coord=[[x,y],[x,y]]; arr_linkCoordinates[k].reverse();}
         	    //console.log(''+arr2);
 	            //пробежимся по LinksArray и заполним  некоторые элементы
 	            add_toLinks=true;    
@@ -573,14 +609,16 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 	                var  tmp_edge1= Link.properties.get('edge1');
 	                if (tmp_edge0==MyHost.hostid){
 	                    Link.geometry.set(0,[x,y]);
+			    Link.options.set('visible',true); // а вот и вторая вершина линка появилась
 	                    if (tmp_edge1==arr2[1]){
 	                     // такой лин уже есть в  LinksArray
 	                        add_toLinks=false;
         	            }
  	               }
                 	if (tmp_edge1==MyHost.hostid){
-	                     Link.geometry.set(1,[x,y]);
-	                     if (tmp_edge1==arr2[1]){
+	                     Link.geometry.set(Link.geometry.getLength()-1,[x,y]);
+			     Link.options.set('visible',true); // а вот и вторая вершина линка появилась	
+	                     if (tmp_edge0==arr2[0]){
 	                     // такой лин уже есть в  LinksArray
 	                         add_toLinks=false;
 	                     }
@@ -592,7 +630,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 	              var myLink=new ymaps.GeoObject({
 	                         geometry: {
 	                                    type: "LineString",
-	                                    coordinates:  tmp_coord
+	                                    coordinates: arr_linkCoordinates[k]
 	                                   },
 	                       properties:{
 	                                    hintContent: arr_hintContent[k]+' <br> '+'<font color="red"> Сделайте dblclick на линке для редактирования его свойств</font>',
@@ -606,9 +644,10 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 	                                    draggable: false,
 	                                    strokeColor: arr_strokeColor[k],
 	                                    strokeWidth: arr_strokeWidth[k],
-					    strokeStyle: arr_strokeStyle[k]
+					    strokeStyle: arr_strokeStyle[k],
+					    visible: false	// когда появится вторая вершина будет true
 	                     });
-
+ 		 //console.log('edge0='+arr2[0]+' edge1='+arr2[1]+' Coords='+arr_linkCoordinates[k]);	
                    myLink.events.add('dblclick',function(event){ me.SetOptionsLink(myLink,event);});
 
 	           me.LinksArray.add( myLink);
@@ -616,8 +655,8 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 	     }//for
            }//if	
     },	
-    
-    // Редактирование свойств метки		
+	
+    // Редактирование свойств метки
     SetOptionsHost: function(Host,event){
 	var me=this;	
 	//console.log('dblcklick host==>'+Host.properties.get('hostid'));

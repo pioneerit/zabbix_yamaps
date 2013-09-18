@@ -10,6 +10,7 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 	CurrentSelectGroup: -100,
 
 	ShowGroup: false,	
+	AlwaysShowAllHostGroups : false,  // Показывать полную карту хостов независимо от выбранной группы
 	/* Add new methods */
 	/**
 	 * Initialization of additional controls
@@ -181,13 +182,15 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 		//ChangeGroup();
 		// Set up onChange reaction
 		jQuery('#selectgroup').change(function() {
+			//me.problems();
 			me.ChangeGroup();
-			me.problems();
+
+
 		});
 		//<--san
 		me.ShowGroupButton  = new ymaps.control.Button({
 			data : {
-				content : 'Show Hosts',
+				content : 'Показать Хосты',
 				title : 'Нажмите, чтобы показать все хосты группы'
 			}
 		}, {
@@ -200,20 +203,13 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 		me.ShowGroupButton.events.add('click', function() {
 		    var state=me.ShowGroupButton.isSelected();
 		    var sel = document.getElementById("selectgroup");
-                    var groupid = sel.options[sel.selectedIndex].value;
 		    if (state==true){   // отжата	
 			me.ShowGroup=false;
-	                me.Map.geoObjects.remove(me.HostArray);
-        	        me.Map.geoObjects.remove(me.LinksArray);
 			}
 		    else{
 			 me.ShowGroup=true;	
-			 if (me.CurrentSelectGroup == groupid) {
-	                        me.Map.geoObjects.add(me.HostArray);
-	                        me.Map.geoObjects.add(me.LinksArray);
-			 }
-			 else{me.ChangeGroup();}
-			}	
+			}
+		    me.ChangeGroup();
 
 	        });
 		 me.ShowGroupButton.deselect();
@@ -223,7 +219,7 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 
           /* Display the problems */
                 me.ChangeGroup();
-                me.problems();
+               // me.problems();
 
 
 	},
@@ -279,7 +275,7 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 
                         // console.log('i='+i+'  ==>'+Host.properties.get('balloonContent'));    
                    }   
-		console.log(Host) ;
+	//	console.log(Host) ;
 		}//for
              },'Cannot load Scripts by host');
                 //      console.log(''+hostid);
@@ -294,10 +290,11 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 	 * Displays the problems
 	 */
 	problems: function() {
-		//console.info("Running problems()");
 		var me = this;
-		me.ProblemArray.removeAll();
+		var HostsIds=[];
 		me.Map.geoObjects.remove(me.ProblemArray);
+       	        me.ProblemArray.removeAll();
+                for (var i=0;i<me.Hosts.length;i++){HostsIds[i]=me.Hosts[i].properties.get('hostid');}
 		var sel = document.getElementById("selectgroup");
 		var groupid = sel.options[sel.selectedIndex].value;
 		// if groupid=0, do not add it to the query
@@ -326,8 +323,14 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 		//console.info("The query will be:");
 		//console.log(groups);
 		//console.log(query);
-		query.params = me.objMerge(query.params, groups);
-			
+	 	if ( (HostsIds.length>0) && (me.ShowGroup==true) && (me.AlwaysShowAllHostGroups == false ) ){
+			query.params = me.objMerge( query.params, {hostids: HostsIds});
+		}
+		else{   
+			query.params = me.objMerge(query.params, groups)
+		}	
+
+
 		me.apiQuery(query, true, function(out){
 			var x_max = 0;
 			var y_max = 0;
@@ -408,8 +411,7 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 	},
 
 
-//<--san
-    //  FillLinks Вызывается из ChangeGroup
+    //      
         FillLinks: function(MyHost){
              var me=this;       
              var myout=''+MyHost.inventory.notes;
@@ -420,45 +422,51 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
                    var arr1=jQuery.parseJSON(myObject.neighbour_peaks);  
                    var arr_strokeColor=jQuery.parseJSON(myObject.neighbour_peaks_strokeColor);
                    var arr_strokeWidth=jQuery.parseJSON(myObject.neighbour_peaks_strokeWidth);
-		   var arr_strokeStyle=jQuery.parseJSON(myObject.neighbour_peaks_strokeStyle);
-		   var arr_hintContent=jQuery.parseJSON(myObject.neighbour_peaks_hintContent);
-
+                   var arr_strokeStyle=jQuery.parseJSON(myObject.neighbour_peaks_strokeStyle);
+                   var arr_hintContent=jQuery.parseJSON(myObject.neighbour_peaks_hintContent);
+                   var arr_linkCoordinates=jQuery.parseJSON(myObject.neighbour_peaks_linkCoordinates);  
                      // ну это просто изврат    
                     if (jQuery.isArray(arr_strokeColor)==false){arr_strokeColor=[];  for (var i=0; i<arr1.length;i++){ arr_strokeColor[i]='#0000FF';} }
                     if (jQuery.isArray(arr_strokeWidth)== false){arr_strokeWidth=[]; for (var i=0; i<arr1.length;i++){arr_strokeWidth[i]=2;} }          
-		    if (jQuery.isArray(arr_strokeStyle)== false){arr_strokeStyle=[]; for (var i=0; i<arr1.length;i++){arr_strokeStyle[i]='';} }
-		    if (jQuery.isArray(arr_hintContent)== false){arr_hintContent=[]; for (var i=0; i<arr1.length;i++){arr_hintContent[i]='';} } 
+                    if (jQuery.isArray(arr_strokeStyle)== false){arr_strokeStyle=[]; for (var i=0; i<arr1.length;i++){arr_strokeStyle[i]='';} }
+                    if (jQuery.isArray(arr_hintContent)== false){arr_hintContent=[]; for (var i=0; i<arr1.length;i++){arr_hintContent[i]='';} } 
+                    if (jQuery.isArray(arr_linkCoordinates)== false){arr_linkCoordinates=[]; for (var i=0; i<arr1.length;i++){arr_linkCoordinates[i]=[[x,y],[x,y]]; } } 
 
-                   var add_toLinks=false;      
+              	  //console.log('id='+MyHost.hostid+ 'Peaks='+arr1);
+
+                   var add_toLinks=false;
                   for (var k=0 ;k<arr1.length;k++){
                     // arr2 сортированный двухэлементный массив  
+                    // Link'и будут начинаться с наименьше вершины (hostid) и заканчиваться наибольшей  
                     var arr2=[arr1[k],arr1[k]];
                     var  tmp_coord=[];   
-                    if (MyHost.hostid<arr1[k])
                     /*
                      координаты сначала для линка будут точка
                      лучше так, чем потерять связь между точками
                      при записи     
                     */
-                        {arr2[0]=MyHost.hostid;tmp_coord=[[x,y],[x,y]];}
-                        else{arr2[1]=MyHost.hostid;tmp_coord=[[x,y],[x,y]];}
-                    //console.log(''+arr2);
+
+                    if (0+MyHost.hostid<0+arr1[k]){arr2[0]=MyHost.hostid;tmp_coord=[[x,y],[x,y]];}
+                    else{arr2[1]=MyHost.hostid;tmp_coord=[[x,y],[x,y]];arr_linkCoordinates[k].reverse();}
+                    //console.log('arr2='+arr2);
                     //пробежимся по LinksArray и заполним  некоторые элементы
                     add_toLinks=true;    
-                   for (var t=0 ;t<me.LinksArray.getLength();t++){
+                    for (var t=0 ;t<me.LinksArray.getLength();t++){
                         var  Link= me.LinksArray.get(t);
-                        var  tmp_edge0= Link.properties.get('edge0');
+        	        var  tmp_edge0= Link.properties.get('edge0');
                         var  tmp_edge1= Link.properties.get('edge1');
                         if (tmp_edge0==MyHost.hostid){
                             Link.geometry.set(0,[x,y]);
+                            Link.options.set('visible',true); // а вот и вторая вершина линка появилась
                             if (tmp_edge1==arr2[1]){
                              // такой лин уже есть в  LinksArray
                                 add_toLinks=false;
                             }
                        }
                         if (tmp_edge1==MyHost.hostid){
-                             Link.geometry.set(1,[x,y]);
-                             if (tmp_edge1==arr2[1]){
+                             Link.geometry.set(Link.geometry.getLength()-1,[x,y]);
+                             Link.options.set('visible',true); // а вот и вторая вершина линка появилась        
+                            if (tmp_edge0==arr2[0]){
                              // такой лин уже есть в  LinksArray
                                  add_toLinks=false;
                              }
@@ -466,33 +474,38 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 
                   }//for            
                  //  А теперь добавим новую точку
-                 if (add_toLinks==true){    
+                 if ( (add_toLinks==true) && !(MyHost.notAddNewLink=== true)){    
                       var myLink=new ymaps.GeoObject({
                                  geometry: {
                                             type: "LineString",
-                                            coordinates:  tmp_coord
+                                            coordinates: arr_linkCoordinates[k]
                                            },
                                properties:{
                                             hintContent: arr_hintContent[k],
+
                                             balloonContent: '',
                                             edge0 :  arr2[0],
                                             edge1 : arr2[1],
+                                            my_hintContent: arr_hintContent[k],
                                            }
                                       }, {
                                             draggable: false,
                                             strokeColor: arr_strokeColor[k],
                                             strokeWidth: arr_strokeWidth[k],
-					    strokeStyle: arr_strokeStyle[k]
+                                            strokeStyle: arr_strokeStyle[k],
+                                            visible: true      //ЗДЕСЬ сразу будет true
                              });
-
-                  // myLink.events.add('dblclick',function(event){ me.SetOptionsLink(myLink,event);});
+                 //console.log('edge0='+arr2[0]+' edge1='+arr2[1]+' Coords='+arr_linkCoordinates[k]);   
+                 //  myLink.events.add('dblclick',function(event){ me.SetOptionsLink(myLink,event);});
 
                    me.LinksArray.add( myLink);
                  }//if      
              }//for
            }//if        
     },  
-        //san ->        
+
+
+
 
   /*
 	FillBallon  временно не будем использовать
@@ -536,6 +549,124 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
              },'Cannot load Scripts by host');
 		//	console.log(''+hostid);
    },
+
+
+	// Добавляет на карту вершины линков , которые не попали в группу в функции ChangeGroup
+	// Это почти то-же , что и ChangeGroup, только дополнительные линки не рисуются	
+	AddExtendEdges: function(ArrayIds){
+	   var me=this;	
+	   var addHosts = []; 
+ 	   for (var t=0 ;t<me.LinksArray.getLength();t++){
+              var  Link= me.LinksArray.get(t);
+              var  tmp_edge0= Link.properties.get('edge0');
+              var  tmp_edge1= Link.properties.get('edge1');
+		//console.log('Link'+t+' :'+ tmp_edge0+' - '+ tmp_edge1);
+	      if (addHosts.indexOf(tmp_edge0)<0) {addHosts.push(tmp_edge0)}
+	      if (addHosts.indexOf(tmp_edge1)<0) {addHosts.push(tmp_edge1)}
+	   }
+		 //console.log('0 AddExtendEdges :'+addHosts);
+		 //console.log(ArrayIds);
+	   for (var t=0 ;t<ArrayIds.length;t++){
+		var index=addHosts.indexOf(ArrayIds[t]);
+		if (index>=0){addHosts.splice(index,1);}	
+	   } 
+		//console.log('1 AddExtendEdges :'+addHosts);
+		
+		
+
+	    var query = {
+                                jsonrpc: "2.0",
+                                method: "host.get",
+                                params: {
+                                        output:["host","name","hostid"],
+                                        selectInventory:["location_lat","location_lon","notes"],
+					hostids: addHosts
+                                },
+                                id: 100
+                        };
+		//console.log(query);
+             me.apiQuery(query, true, function(out) { 
+			var bounds=me.Map.getBounds();
+                        var x_max = bounds[1][0];
+                        var y_max = bounds[1][1];
+                        var x_min = bounds[0][0];
+                        var y_min = bounds[0][1];
+                        var hostIds=[];
+			// Добываем  картинку из presetStorage
+                        var imgshadow=ymaps.option.presetStorage.get('twirl#nightClusterIcons');
+                         //console.log(url_imgshadow.clusterIcons[0].href);
+
+                        for ( var i = 0; i < out.result.length; i++) {
+                                if (out.result[i].inventory.location_lat == 0 || out.result[i].inventory.location_lon == 0) {
+                                        x = me.def_lat;
+                                        y = me.def_lon;
+                                        iconPreset = 'twirl#darkorangeDotIcon';
+                                } else {
+                                        x = out.result[i].inventory.location_lat;
+                                        y = out.result[i].inventory.location_lon;
+                                        iconPreset = 'twirl#greenIcon';
+                                }
+                                if (x > x_max) x_max = x;
+                                if (x < x_min) x_min = x;
+                                if (y > y_max) y_max = y;
+                                if (y < y_min) y_min = y;
+
+				// не добавлятть новый линк в FillLinks
+				out.result[i].notAddNewLink= true;
+				me.FillLinks(out.result[i]);
+
+                                            var aaaa = new ymaps.Placemark(
+                                                [ x, y ], 
+                                                {
+                                                        hintContent : out.result[i].name+'<br>('+out.result[i].hostid+')' ,
+                                                        hostid : out.result[i].hostid,
+                                                        fill_ballon: false,
+                                                        clusterCaption: out.result[i].name,
+                                                        balloonContent : out.result[i].host+'<br>('+out.result[i].hostid+')'
+
+                                                 },
+                                                {
+						       iconShadow: true,
+					               iconShadowImageHref: imgshadow.clusterIcons[0].href,
+						       iconShadowImageSize: [20, 20],
+						       iconShadowImageOffset: [-10, -10],
+						       iconShadowOffset: [0, 0],
+                                                        draggable : false,
+                                                        preset : iconPreset
+                                                }
+
+                                           );
+                                                // var myout=out.result[i].inventory.notes
+                                                var myObject=jQuery.parseJSON(out.result[i].inventory.notes);   
+                                                //console.log(myObject);
+                                                if (myObject!=null){
+                                                        var ImagesArray=jQuery.parseJSON(myObject.ImagesArray);
+                                                        if (jQuery.isArray(ImagesArray)==true){
+                                                         //console.log(ImagesArray[0]);
+                                                          aaaa.properties.set('imageid',ImagesArray[0].imageid);
+                                                          aaaa.options.set({
+                                                                iconImageHref:  'imgstore.php?iconid=' +ImagesArray[0].imageid,
+                                                                iconImageSize:  ImagesArray[0].iconImageSize,
+                                                                iconImageOffset:ImagesArray[0].iconImageOffset
+                                                         });
+                                                        }//if
+	                                             }
+
+                         me.Hosts.push(aaaa);
+ 			 me.HostArray.add(aaaa);
+                         hostIds.push(out.result[i].hostid);
+                        }//for
+			me.problems();
+	                me.Map.setBounds([ [ x_min, y_min ], [ x_max, y_max ] ], {
+                                duration : 1000,
+                                checkZoomRange : true
+                        });
+
+
+	       }, 'Cannot load hosts');
+             return ArrayIds.concat(addHosts);
+
+	}, 
 	// san -->
 
 	/**
@@ -544,20 +675,34 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 	ChangeGroup: function(){
 		//console.info('ZabbixYaMapRW.ChangeGroup() was called');
 		var me = this;
-		if (me.ShowGroup==false){return;}		
+                var sel = document.getElementById("selectgroup");
+                var groupid = sel.options[sel.selectedIndex].value;
 
-		var sel = document.getElementById("selectgroup");
-		var groupid = sel.options[sel.selectedIndex].value;
+		if (me.ShowGroup==false){
+                        me.Map.geoObjects.remove(me.HostArray);
+                        me.Map.geoObjects.remove(me.LinksArray);
+			me.problems();
+			return;
+		}
+		else{
+     			if (me.CurrentSelectGroup == groupid) {
+                                me.Map.geoObjects.add(me.HostArray);
+                                me.Map.geoObjects.add(me.LinksArray);
+	                        me.problems();
+        	                return;
+			}
+		}	
+
+		if ( me.AlwaysShowAllHostGroups == true ) {groupid=0;}
+
                 //san
                 me.CurrentSelectGroup=groupid;          
-
 		me.HostArray.removeAll();
 		me.Map.geoObjects.remove(me.HostArray);
                 me.Hosts.length=0;
-		//<--san 
 		me.Map.geoObjects.remove(me.LinksArray);
 		me.LinksArray.removeAll();
-		//san -->	
+
 
 		var query = {
 				jsonrpc: "2.0",
@@ -568,6 +713,7 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 				},
 				id: 1
 			};
+
 		if(groupid == 0){
 			var groups = {};
 		} else {
@@ -583,7 +729,7 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 			var y_max = 0;
 			var x_min = 180;
 			var y_min = 180;
-			   var hostIds=[];
+			var hostIds=[];
             //console.info('Got the result');
             //console.log(out);
             //console.log(me);
@@ -656,12 +802,15 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 	
 					(function(aaaa){ 
 						me.FillBallon(aaaa);           
-                                        })(aaaa);
+        	                         })(aaaa);
 */
-			 me.Hosts.push(aaaa);
-                     	 hostIds.push(out.result[i].hostid);
+			 me.Hosts.push(aaaa);	
+	               	 hostIds.push(out.result[i].hostid);
 			}//for
-			  me.AddLinksScript(hostIds);
+
+			// Заполним 'граничные точки' и добавмим их id  в hostIds
+			hostIds=me.AddExtendEdges(hostIds);
+			me.AddLinksScript(hostIds);
 			me.HostArray.add(me.Hosts);
 			//console.info('ALl the hosts');
 			//console.log(me.HostArray);
@@ -669,11 +818,12 @@ var ZabbixYaMapRO = Class.create(ZabbixYaMap, {
 			//san
 			me.Map.geoObjects.add(me.LinksArray); 	
 			// Zoom the map
-			me.Map.setBounds([ [ x_min, y_min ], [ x_max, y_max ] ], {
-				duration : 1000,
-				checkZoomRange : true
-			});
+				me.Map.setBounds([ [ x_min, y_min ], [ x_max, y_max ] ], {
+					duration : 1000,
+					checkZoomRange : true
+				});
 		}, 'Cannot load hosts');
+         
 
 	}
 });
