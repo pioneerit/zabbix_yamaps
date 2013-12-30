@@ -17,7 +17,7 @@
         }
    </style>
 
-<script type="text/javascript" src="/js/jscolor/jscolor.js"></script>
+<script type="text/javascript" src="js/jscolor/jscolor.js"></script>
 
 <script type="text/javascript">
 var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
@@ -361,6 +361,16 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 
 			// Запрещаем удаление вешины по двойному клику	
 			Link.editor.options.set('dblClickHandler', function () {});
+			// Заперщаем  перемещение 'крайних вершин'
+
+			Link.editor.events.add(["beforevertexdrag"], function (event) {
+				 var vertexModel = event.get('target').properties.get('model'),
+         			  vertexIndex = vertexModel.getIndex();
+		  	          if (vertexIndex == 0 || vertexIndex == vertexModel.getParent().getVertexModels().length - 1) {
+				            event.preventDefault();
+			          }
+			 	});
+
 			// Удаляем контекстное меню для 'крайних ' вершин
 			// А вообще почему-то нельзя использовать Link.editor.options.set для MenuManager	
 			Link.options.set({
@@ -435,7 +445,11 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 	               }  
           	       if (flag_id0==false){me.LinksChange.push(id0);}
 	               if (flag_id1==false){me.LinksChange.push(id1);}   
-			
+			// Запишем 'крайние'точки ломаной по старым координатам, если  чел их случайно передвинул
+			var TmpCoordinates=Link.geometry.getCoordinates();
+			TmpCoordinates[0]=OldCoordinates[0];
+			TmpCoordinates[TmpCoordinates.length-1]=OldCoordinates[OldCoordinates.length-1];
+			Link.geometry.setCoordinates(TmpCoordinates);
 			 Link.editor.stopEditing();
 
 			// Изменим логику записи в базу
@@ -498,7 +512,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
 		     // Включаем возможность перетаскивания ломаной.
                        draggable: false,
                     // Цвет линии.
-                       strokeColor: "#0DFF00",
+                       strokeColor: "#0000FF",
                     // Ширина линии.
                        strokeWidth: 2
                    });
@@ -943,7 +957,7 @@ var ZabbixYaMapRW = Class.create(ZabbixYaMap, {
                                                                 //me.Hosts[i].options.set('preset' , 'twirl#redIcon');
 								me.Hosts[i].options.set('visible',false);
 								me.TmpLabel[me.my_count].geometry.setCoordinates(me.Hosts[i].geometry.getCoordinates());
-								 me.TmpLabel[me.my_count].options.set('visible',true);
+								me.TmpLabel[me.my_count].options.set('visible',true);
                                                                 me.Map.geoObjects.add(me.TmpLabel[me.my_count]);
 
 

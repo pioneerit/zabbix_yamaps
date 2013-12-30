@@ -64,4 +64,14 @@ https://www.zabbix.com/forum/showthread.php?p=133138#post133138
 3) Иправлены ошибки. :)
 
 
+октябрь-декабрь 2013
+1) Сделал небольшое испраление в yandex-rw . Те перь при редактировани линка нельзя удалить или переместить 'крайние' вершины линка
+2) согласно замечанию  https://www.zabbix.com/forum/showpost.php?p=141947&postcount=132 
+   Исправил   в  zabbix/include/views/js/configuration.yamaps.js.php
+   <script type="text/javascript" src="/js/jscolor/jscolor.js"></script>
+   на
+   <script type="text/javascript" src="js/jscolor/jscolor.js"></script>
+   
+
+
 PS  Разрабатывал для себя (точнее ради интереса и изучения yandexmap && JSON), прошу сильно не пиннать :-)
